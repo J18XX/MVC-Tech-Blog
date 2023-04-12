@@ -1,64 +1,55 @@
-const router = require('express').Router();
-const { User } = require('../../models');
+const { Model, DataTypes } = require('sequelize');
+const bcrypt = require('bcrypt');
+const sequelize = require('../config/connection');
 
-// creating a new user
-router.post('/signup', async (req, res) => {
-    try {
-        const userData = await User.create(req.body);
-        console.log(userData)
-        req.session.save(() => {
-            req.session.user_id = userData.id;
-            req.session.logged_in = true;
+class User extends Model {
+  checkPassword(loginPw) {
+    return bcrypt.compareSync(loginPw, this.password);
+  }
+}
 
-            res.status(200).json(userData);
-        });
-    } catch (err) {
-        console.error(err)
-        res.status(400).json(err);
-    }
-});
-// login
-router.post('/signin', async (req, res) => {
-    try {
-        const userData = await User.findOne({ where: { email: req.body.email } });
+User.init(
+  {
+    id: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      primaryKey: true,
+      autoIncrement: true,
+    },
+    name: {
+      type: DataTypes.STRING,
+      allowNull: false,
+    },
+    userNmae: {
+      type: DataTypes.STRING,
+      allowNull: false,
+      unique: true,
+    },
+    password: {
+      type: DataTypes.STRING,
+      allowNull: false,
+      validate: {
+        len: [8],
+      },
+    },
+  },
+  {
+    hooks: {
+      beforeCreate: async (newUserData) => {
+        newUserData.password = await bcrypt.hash(newUserData.password, 10);
+        return newUserData;
+      },
+      beforeUpdate: async (updatedUserData) => {
+        updatedUserData.password = await bcrypt.hash(updatedUserData.password, 10);
+        return updatedUserData;
+      },
+    },
+    sequelize,
+    timestamps: false,
+    freezeTableName: true,
+    underscored: true,
+    modelName: 'user',
+  }
+);
 
-        if (!userData) {
-            res
-                .status(400)
-                .json({ message: 'Incorrect email or password, please try again' });
-            return;
-        }
-
-        const validPassword = await userData.checkPassword(req.body.password);
-
-        if (!validPassword) {
-            res
-                .status(400)
-                .json({ message: 'Incorrect email or password, please try again' });
-            return;
-        }
-
-        req.session.save(() => {
-            req.session.user_id = userData.id;
-            req.session.logged_in = true;
-
-            res.json({ user: userData, message: 'You are now logged in!' });
-        });
-
-    } catch (err) {
-        res.status(400).json(err);
-    }
-});
-//log out
-router.get('/signOut', (req, res) => {
-    if (req.session.logged_in) {
-        req.session.destroy(() => {
-            res.render('SignInPage');
-
-        });
-    } else {
-        res.status(404).end();
-    }
-});
-
-module.exports = router;
+module.exports = User;
